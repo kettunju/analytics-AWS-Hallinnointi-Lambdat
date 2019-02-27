@@ -21,6 +21,15 @@ import com.amazonaws.services.s3.model.ObjectMetadata;
 
 public class CSVLoader implements Runnable{
 
+	private String username;
+	private String password;
+	private String csv;
+	private String clientRegion;
+	private String url;
+	private String bucketName;
+	private String savePathAndFileName;
+	private Context context;
+
 	public CSVLoader(String clientRegion, String bucketName, String savePath,String url,String username, String password,Context context) {
 	this.url=url;
 	this.clientRegion=clientRegion;
@@ -31,14 +40,6 @@ public class CSVLoader implements Runnable{
 	this.context=context;	
 	}
 			
-	private String username;
-	private String password;
-	private String csv;
-	private String clientRegion;
-	private String url;
-	private String bucketName;
-	private String savePathAndFileName;
-	private Context context;
 
 	
 	
@@ -51,13 +52,20 @@ public class CSVLoader implements Runnable{
 		try {
 			csv= getCSV();
 		} catch (IOException e1) {
+			context.getLogger().log("Failed file\\n" +savePathAndFileName +"\n" + url);
 			System.err.println("Fatal error: Failed to download csv" + savePathAndFileName);
 			e1.printStackTrace();
+			return ;
+		} catch (Exception e) {
+			context.getLogger().log("Unknown error \n " + url+"\n" );
+			context.getLogger().log("Failed file" +savePathAndFileName);
+			e.printStackTrace();
 			return ;
 		}
 		AmazonS3 s3Client = AmazonS3Client.builder().withRegion(clientRegion).build();
 		try {
-			byte[] stringbytearray= csv.getBytes("UTF-8");
+			context.getLogger().log(csv);
+			byte[] stringbytearray= csv.getBytes();
 			InputStream byteString = new ByteArrayInputStream(stringbytearray);
 			ObjectMetadata oMetadata = new ObjectMetadata();
 			oMetadata.setContentType("plain/text");
@@ -65,14 +73,7 @@ public class CSVLoader implements Runnable{
 			s3Client.putObject(bucketName,savePathAndFileName, byteString,oMetadata);
 			System.out.println("CSV load successfully");
 			
-		} catch (UnsupportedEncodingException e) {
-			String errorMessage="Error: Failure to encode file to load in: " + savePathAndFileName;
-			context.getLogger().log(errorMessage);
-			
-			System.err.println(errorMessage);
-			e.printStackTrace();
-		}
-		catch (Exception e) {
+		} catch (Exception e) {
 			
 			String errorMessage="Error: S3 write error " + savePathAndFileName;
 			context.getLogger().log(errorMessage);
@@ -85,15 +86,15 @@ public class CSVLoader implements Runnable{
     	String login = username + ":" + password;
     	String base64login = new String(Base64.encodeBase64(login.getBytes()));   
     	URL uurl = new URL(url);
+    	context.getLogger().log("Creating connection:"+ url );
     	URLConnection uc = uurl.openConnection();
     	uc.setRequestProperty("Authorization", "Basic " + base64login);		
     	   BufferedReader in   =   
-    	            new BufferedReader (new InputStreamReader (uc.getInputStream(),"ISO-8859-1"));
-
+    	            new BufferedReader (new InputStreamReader (uc.getInputStream(),"UTF-8"));
     	   String line;
     	   StringBuilder csv = new StringBuilder();
     	   while ((line = in.readLine()) != null) {
-    		   csv.append(line + "\n");
+    		   csv.append(line + "\r\n");
     	   }   
     	   in.close();
 		return csv.toString();

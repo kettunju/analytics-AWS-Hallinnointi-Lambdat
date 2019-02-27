@@ -27,6 +27,7 @@ import com.amazonaws.services.s3.model.S3Object;
 @RunWith(MockitoJUnitRunner.class)
 public class S3EventHandlerTest {
 
+
 	private final String CONTENT_TYPE = "image/jpeg";
 	private S3Event event;
 	private String testJson;
@@ -39,16 +40,16 @@ public class S3EventHandlerTest {
 	@Captor
 	private ArgumentCaptor<GetObjectRequest> getObjectRequest;
 
-	@Before
+	/*@Before
 	public void setUp() throws IOException {
-		event = TestUtils.parse("/s3-event.put.json", S3Event.class);
+		event = TestUtils.parse("/manifesttemplate.json", S3Event.class);
 		String text = 
 				testJson = new Scanner(S3EventHandlerTest.class.getResourceAsStream("/manifesttemplate.json"), "UTF-8").useDelimiter("\\A").next();;
 				ObjectMetadata objectMetadata = new ObjectMetadata();
 				objectMetadata.setContentType(CONTENT_TYPE);
 				when(s3Object.getObjectMetadata()).thenReturn(objectMetadata);
 				when(s3Client.getObject(getObjectRequest.capture())).thenReturn(s3Object);
-	}
+	}*/
 
 	private Context createContext() {
 		TestContext ctx = new TestContext();
@@ -64,5 +65,12 @@ public class S3EventHandlerTest {
 		S3EventHandler handle = new S3EventHandler();
 		String resultManifest=  handle.createManifestContent(testJson, "testbucket", "test/hierarcy/test.json");
 		Assert.assertEquals("check that resulting manifest is correct", "{\"entries\":[{\"mandatory\":\"true\",\"url\":\"s3://testbucket/test/hierarcy/test.json\"}],\"columns\":[\"SDT_SORT_ORDER\",\"SDT_STAGE_BATCH_ID\",\"SDT_STAGE_CREATE_TIME\",\"SDT_STAGE_ID\",\"SDT_STAGE_SOURCE\",\"SDT_STAGE_SOURCE_TECH\",\"SDT_STAGE_SOURCE_TYPE\",\"field_1\"]}", resultManifest);
+	}
+	
+	@Test
+	public void testfileIsScanned() {
+		S3EventHandler handle = new S3EventHandler();
+		handle.checkIfFileiSFullscan("navigointilaji");
+		Assert.assertEquals("check that resulting manifest is correct",true , handle.fullscanned);
 	}
 }
