@@ -91,10 +91,11 @@ exports.handler = async(event) => {
 
             console.log('## tallennusavain: ' + destKey);
 
+            // lisataan CRLF json tiedostoon per ADE speksit
             s3.putObject({
                 Bucket: process.env.destBucket,
                 Key: destKey,
-                Body: data.Body,
+                Body: data.Body + '\r\n',
                 ACL: 'bucket-owner-full-control'
             }, function(err, response){
                 if(err) {
@@ -140,10 +141,11 @@ exports.handler = async(event) => {
             const destKey = process.env.destBucketManifestPrefix + 'manifest-table.servicenow_' + fileName + '.' + time + '.batch.' + time + '.fullscanned.true.json';
             console.log('## manifest destkey: ' + destKey);
             
+            // lisataan CRLF manifest tiedostoon per ADE speksit
             s3.putObject({
                 Bucket: process.env.destBucketManifest,
                 Key: destKey,
-                Body: JSON.stringify(manifestdata),
+                Body: JSON.stringify(manifestdata) + '\r\n',
                 ACL: 'bucket-owner-full-control'
             }, function(err, response){
                 if(err){
