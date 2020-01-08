@@ -2,8 +2,11 @@ package com.vayla.lambda.velho.metadata;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Date;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -12,6 +15,10 @@ public class VelhoRequestSigner {
 	
 	static final String accessKey = System.getenv("velhoAccessKey");
 	static final String secretKey = System.getenv("velhoSecretKey");
+	
+	static void log(String s){
+		System.out.println(s);
+	}
 	
 	public VelhoRequestSigner() {
 		// TODO Auto-generated constructor stub
@@ -35,8 +42,9 @@ public class VelhoRequestSigner {
 	
 	static String getVelhoAuthKey(String method, String service, String host, String region, String endpoint, String requestParameters) throws Exception {
 		// Create a date for headers and the credential string
-		LocalDate t = LocalDate.now();
-		String amzdate = t.format(DateTimeFormatter.ISO_INSTANT);
+		LocalDateTime t = LocalDateTime.now();
+		log(t.toString());
+		String amzdate = t.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
 		String datestamp = t.format(DateTimeFormatter.ISO_LOCAL_DATE); // Date w/o time, used in credential scope
 		
 		/*
