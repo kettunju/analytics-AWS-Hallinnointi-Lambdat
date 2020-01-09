@@ -7,21 +7,17 @@ import software.amazon.awscdk.core.Duration;
 import software.amazon.awscdk.core.Stack;
 import software.amazon.awscdk.core.StackProps;
 import software.amazon.awscdk.services.lambda.*;
-import software.amazon.awscdk.services.lambda.Runtime;
 import software.amazon.awscdk.services.s3.*;
 import software.amazon.awscdk.services.sns.Topic;
 import software.amazon.awscdk.services.sns.subscriptions.SqsSubscription;
+import software.amazon.awscdk.services.sns.subscriptions.EmailSubscription;
 import software.amazon.awscdk.services.sqs.Queue;
 import software.amazon.awscdk.services.stepfunctions.Activity;
 import software.amazon.awscdk.services.stepfunctions.Chain;
-import software.amazon.awscdk.services.stepfunctions.Choice;
-import software.amazon.awscdk.services.stepfunctions.Condition;
-import software.amazon.awscdk.services.stepfunctions.Fail;
 import software.amazon.awscdk.services.stepfunctions.StateMachine;
 import software.amazon.awscdk.services.stepfunctions.Task;
-import software.amazon.awscdk.services.stepfunctions.Wait;
-import software.amazon.awscdk.services.stepfunctions.WaitTime;
 import software.amazon.awscdk.services.stepfunctions.tasks.InvokeActivity;
+import software.amazon.awscdk.services.s3.notifications.*;
 
 public class VelhoAnalyticsStack extends Stack {
         public VelhoAnalyticsStack(final Construct parent, final String id) {
@@ -44,7 +40,8 @@ public class VelhoAnalyticsStack extends Stack {
                                 .code(Code.fromAsset("lambdas" + File.separator + "eventpasser" + File.separator
                                                 + "target" + File.separator
                                                 + "lambda-java-evenpasser-1.0-SNAPSHOT.jar"))
-                                .runtime(Runtime.JAVA_11).handler("com.vayla.Lambdas.eventpasser.EventPass").build();
+                                .runtime(software.amazon.awscdk.services.lambda.Runtime.JAVA_11)
+                                .handler("com.vayla.Lambdas.eventpasser.EventPass").build();
 
                 final Queue queue = Queue.Builder.create(this, "VelhoAnalyticsQueue")
                                 .visibilityTimeout(Duration.seconds(300)).build();
@@ -52,21 +49,17 @@ public class VelhoAnalyticsStack extends Stack {
                 final Topic topic = Topic.Builder.create(this, "VelhoAnalyticsTopic")
                                 .displayName("DQL for Stepfunctions alert").build();
 
-                final BucketNotificationDestinationConfig bucketNotificationConfig = BucketNotificationDestinationConfig
-                                .builder().type(BucketNotificationDestinationType.LAMBDA)
-                                .arn(landingBucket.getBucketArn()).build();
+                NotificationKeyFilter ntfilter = NotificationKeyFilter.builder().prefix("/*").build();
 
-                // evenPasserLambda.BucketNotificationDestinationConfig(bucketNotificationConfig);
-                /*
-                 * EventSourceMapping eventsources =
-                 * EventSourceMapping.Builder.create(this,"mappings")
-                 * .eventSourceArn(landingBucket.getBucketArn()) .target(evenPasserLambda)
-                 * .build();
+                /**
+                 * Here we create notification to trigger lambda when any file is added to
+                 * bucket
                  */
+                landingBucket.addEventNotification(software.amazon.awscdk.services.s3.EventType.OBJECT_CREATED_PUT,
+                                new LambdaDestination(evenPasserLambda), ntfilter);
 
-                // landingBucket.addEventNotification(EventType.OBJECT_CREATED_PUT);
+                // topic.addSubscription(new EmailSubscription("")); /** */
 
-                topic.addSubscription(new SqsSubscription(queue));
                 //////// Step function
                 try {
 
@@ -105,4 +98,5 @@ public class VelhoAnalyticsStack extends Stack {
                 }
 
         }
+
 }
