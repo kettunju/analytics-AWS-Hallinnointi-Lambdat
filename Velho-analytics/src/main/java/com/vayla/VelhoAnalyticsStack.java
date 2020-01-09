@@ -40,8 +40,15 @@ public class VelhoAnalyticsStack extends Stack {
                                 .code(Code.fromAsset("lambdas" + File.separator + "eventpasser" + File.separator
                                                 + "target" + File.separator
                                                 + "lambda-java-evenpasser-1.0-SNAPSHOT.jar"))
-                                .runtime(software.amazon.awscdk.services.lambda.Runtime.JAVA_11)
+                                .runtime(software.amazon.awscdk.services.lambda.Runtime.JAVA_8)
                                 .handler("com.vayla.Lambdas.eventpasser.EventPass").build();
+
+                final Function getMetadataLambda = Function.Builder.create(this, "MetadataLoaderLambda")
+                                .functionName("VelhoMetadataLoader").timeout(Duration.minutes(5))
+                                .code(Code.fromAsset("lambdas" + File.separator + "velhometadata" + File.separator
+                                                + "target" + File.separator + "velho.metadata-1.0.0.jar"))
+                                .runtime(software.amazon.awscdk.services.lambda.Runtime.JAVA_8)
+                                .handler("com.vayla.lambda.velho.metadata.LambdaFunctionHandler").build();
 
                 final Queue queue = Queue.Builder.create(this, "VelhoAnalyticsQueue")
                                 .visibilityTimeout(Duration.seconds(300)).build();
@@ -69,6 +76,14 @@ public class VelhoAnalyticsStack extends Stack {
                                         .task(InvokeActivity.Builder.create(submitJobActivity).build())
                                         .resultPath("$.guid").build();
 
+                        // Task to invoke lambda (InvokeFunction) that will get metadata from Velho
+                        // REST/API
+                        Task getMetadataTask = Task.Builder.create(this, "MetadataLoderTask")
+                                        // .task(InvokeFunction.Builder.create(getMetadataLambda).build())
+                                        // TODO this has to be fixed
+                                        .task(InvokeActivity.Builder.create(submitJobActivity).build())
+                                        .resultPath("$.guid").build();
+
                         Task convertToADE = Task.Builder.create(this, "convertToAde")
                                         .task(InvokeActivity.Builder.create(submitJobActivity).build())
                                         .resultPath("$.guid").build();
@@ -88,7 +103,8 @@ public class VelhoAnalyticsStack extends Stack {
                          * .error("DescribeJob returned FAILED").build();
                          */
 
-                        Chain chain = Chain.start(submitJob).next(convertToADE).next(createManifest);
+                        Chain chain = Chain.start(submitJob).next(getMetadataTask).next(convertToADE)
+                                        .next(createManifest);
 
                         StateMachine.Builder.create(this, "StateMachine").definition(chain)
                                         .timeout(Duration.seconds(30)).build();
