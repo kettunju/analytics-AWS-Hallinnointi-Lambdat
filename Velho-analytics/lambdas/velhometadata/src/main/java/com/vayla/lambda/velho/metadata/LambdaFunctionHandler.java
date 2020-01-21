@@ -6,6 +6,8 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 import com.amazonaws.regions.Regions;
 import com.amazonaws.services.lambda.runtime.Context;
@@ -15,10 +17,10 @@ import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3Client;
 
 public class LambdaFunctionHandler implements RequestHandler<Object, String> {
-	private AmazonS3 s3 = AmazonS3Client.builder().withRegion(Regions.EU_WEST_1).build();
-	static final String velhoHost = System.getenv("velhoHost"); // https://api.stg.velho.vayla.fi
-	static final String velhoAPI = System.getenv("velhoAPI"); // esim. https://api.stg.velho.vayla.fi/v1/kohdeluokat
-	static final String velhoRegion = System.getenv("velhoRegion"); // eu-central-1
+	private AmazonS3 s3 = AmazonS3Client.builder().withRegion(Regions.EU_CENTRAL_1).build();
+	static final String velhoHost = "api.stg.velho.vayla.fi";//System.getenv("velhoHost"); 
+	static final String velhoAPI = "https://api.stg.velho.vayla.fi/v1/kohdeluokat"; //System.getenv("velhoAPI");
+	static final String velhoRegion = "eu-central-1"; //System.getenv("velhoRegion"); 
 	static final String velhoService = "execute-api"; // AWS API Gateway
 	LambdaLogger logger;
 
@@ -31,21 +33,29 @@ public class LambdaFunctionHandler implements RequestHandler<Object, String> {
 	}
 
 	void log(String s) {
-		logger.log(s);
+		if(logger != null) logger.log(s);
+		else System.out.println(s);
 	}
 
 	@Override
 	public String handleRequest(Object event, Context context) {
-		this.logger = context.getLogger();
-		log("Received event: " + event);
+		//this.logger = context.getLogger();
+		log("## Received event: " + event);
+		// Create a date for headers and the credential string
+		LocalDateTime t = LocalDateTime.now();
+		log(t.toString());
+		DateTimeFormatter format1 = DateTimeFormatter.ofPattern("YYYYMMDD'T'HHMMSS'Z'"); // Amzdate, The time stamp must be in UTC and in the following ISO 8601 format: YYYYMMDD'T'HHMMSS'Z'.
+		DateTimeFormatter format2 = DateTimeFormatter.ofPattern("YYYYMMDD"); // Date w/o time, used in credential scope
+		String amzdate = t.format(format1);
+		String datestamp = t.format(format2); 
 
 		try {
-			//TODO: luo allekirjoitusavain https://api.stg.velho.vayla.fi/v1/kohdeluokat
-			String authHeader = VelhoRequestSigner.getVelhoAuthKey("GET", "execute-api", "https://api.stg.velho.vayla.fi", "eu-central-1", "https://api.stg.velho.vayla.fi/v1/kohdeluokat", "");
+			//TODO: luo allekirjoitusavain 
+			String authHeader = VelhoRequestSigner.getVelhoAuthKey("GET", velhoService, velhoHost, "eu-central-1", "", amzdate, datestamp);
 			log(authHeader);
 			
 			// TODO: kutsu velhon rajapintaa
-			String jsonString = getMetadata("https://api.stg.velho.vayla.fi/v1/kohdeluokat", authHeader);
+			String jsonString = getMetadata(velhoAPI, authHeader, velhoHost, amzdate);
 			log(jsonString);
 
 		} catch (Exception e) {
@@ -57,15 +67,15 @@ public class LambdaFunctionHandler implements RequestHandler<Object, String> {
 		return "OK";
 	}
 
-	String getMetadata(String urlString, String authHeader) {
+	String getMetadata(String urlString, String authHeader, String host, String amzdate) {
 		StringBuilder sb = new StringBuilder();
 		sb.append("");
 		try {
 			URL url = new URL(urlString);
-			log("Url created");
+			log("## Url created");
 			
 			HttpURLConnection httpconn = (HttpURLConnection) url.openConnection();
-			log("Connection open");
+			log("## Connection open");
 			
 			// The request can include any headers, but MUST include "host", "x-amz-date", 
 			// and (for this scenario) "Authorization". "host" and "x-amz-date" must
@@ -73,6 +83,9 @@ public class LambdaFunctionHandler implements RequestHandler<Object, String> {
 			// earlier. Order here is not significant.
 			httpconn.setRequestMethod("GET");
 			httpconn.setRequestProperty("Authorization", authHeader);
+			httpconn.setRequestProperty("host", host);
+			httpconn.setRequestProperty("x-amz-date", amzdate);
+			log("## Connection properties set");
 			
 			BufferedReader br = new BufferedReader(new InputStreamReader(httpconn.getInputStream()));
 			String str = "";
@@ -90,5 +103,10 @@ public class LambdaFunctionHandler implements RequestHandler<Object, String> {
 			e.printStackTrace();
 		}
 		return sb.toString();
+	}
+	
+	public static void main(String[] args) {
+		LambdaFunctionHandler me = new LambdaFunctionHandler();
+		me.handleRequest(null, null);
 	}
 }

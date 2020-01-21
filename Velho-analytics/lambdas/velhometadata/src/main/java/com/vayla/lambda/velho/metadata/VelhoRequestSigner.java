@@ -2,19 +2,14 @@ package com.vayla.lambda.velho.metadata;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.util.Date;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 
 public class VelhoRequestSigner {
 	
-	static final String accessKey = System.getenv("velhoAccessKey");
-	static final String secretKey = System.getenv("velhoSecretKey");
+	static final String accessKey = ""; //System.getenv("velhoAccessKey");
+	static final String secretKey = "+l"; //System.getenv("velhoSecretKey");
 	
 	static void log(String s){
 		System.out.println(s);
@@ -40,12 +35,18 @@ public class VelhoRequestSigner {
 	    return kSigning;
 	} 
 	
-	static String getVelhoAuthKey(String method, String service, String host, String region, String endpoint, String requestParameters) throws Exception {
-		// Create a date for headers and the credential string
-		LocalDateTime t = LocalDateTime.now();
-		log(t.toString());
-		String amzdate = t.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
-		String datestamp = t.format(DateTimeFormatter.ISO_LOCAL_DATE); // Date w/o time, used in credential scope
+	private static final char[] HEX_ARRAY = "0123456789ABCDEF".toCharArray();
+	public static String bytesToHex(byte[] bytes) {
+	    char[] hexChars = new char[bytes.length * 2];
+	    for (int j = 0; j < bytes.length; j++) {
+	        int v = bytes[j] & 0xFF;
+	        hexChars[j * 2] = HEX_ARRAY[v >>> 4];
+	        hexChars[j * 2 + 1] = HEX_ARRAY[v & 0x0F];
+	    }
+	    return new String(hexChars);
+	}
+	
+	static String getVelhoAuthKey(String method, String service, String host, String region, String requestParameters, String amzdate, String datestamp) throws Exception {
 		
 		/*
 		 *  TASK 1: CREATE A CANONICAL REQUEST
@@ -77,22 +78,27 @@ public class VelhoRequestSigner {
 		// Step 6: Create payload hash (hash of the request body content). For GET
 		// requests, the payload is an empty string ("").
 		MessageDigest digest = MessageDigest.getInstance("SHA-256");
-		byte[] hash = digest.digest("".getBytes(StandardCharsets.UTF_8));
-		String payloadHash = new String(hash, StandardCharsets.UTF_8);
+		digest.update("".getBytes(StandardCharsets.UTF_8));
+		byte[] hash = digest.digest();
+		String payloadHash = bytesToHex(hash).toLowerCase();
 
 		// Step 7: Combine elements to create canonical request
 		String canonicalRequest = method + "\n" + canonicalUri + "\n" + canonicalQuerystring + "\n" + canonicalHeaders + "\n" + signedHeaders + "\n" + payloadHash;
+		log("canonical request: " + canonicalRequest);
 		
 		/*
 		 * TASK 2: CREATE THE STRING TO SIGN
 		 */
 		String algorithm = "AWS4-HMAC-SHA256";
 		String credentialScope = datestamp + "/" + region + "/" + service + "/" + "aws4_request";
-		byte[] hash2 = digest.digest(canonicalRequest.getBytes(StandardCharsets.UTF_8));
-		String requestHash = new String(hash2, StandardCharsets.UTF_8);
+		digest.reset();
+		digest.update(canonicalRequest.getBytes(StandardCharsets.UTF_8));
+		byte[] hash2 = digest.digest();
+		String requestHash = bytesToHex(hash2).toLowerCase();
 		
 		// Combine
 		String stringToSign = algorithm + "\n" + amzdate + "\n" + credentialScope + "\n" + requestHash;
+		log("string to sign: " + stringToSign);
 		
 		/**
 		 * TASK 3: CALCULATE THE SIGNATURE
@@ -102,8 +108,9 @@ public class VelhoRequestSigner {
 		byte[] signingKey = getSignatureKey(secretKey, datestamp, region, service);
 		
 		// Step 2. Sign the stringToSign using the signingKey
-		// TODO:
-		String signature = "signed";
+		// TODO:signature = hmac.new(signing_key, (string_to_sign).encode('utf-8'), hashlib.sha256).hexdigest()
+		String signature = bytesToHex(HmacSHA256(stringToSign, signingKey)).toLowerCase();
+		log("signature: " + signature);
 		
 		/**
 		 * TASK 4: 	RETURN SIGNING INFORMATION TO THE REQUEST
