@@ -1,7 +1,5 @@
 package com.vayla.lambda.velho.metadata;
 
-import static org.mockito.Mockito.when;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 

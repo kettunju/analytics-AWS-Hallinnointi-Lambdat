@@ -6,10 +6,12 @@ import java.security.MessageDigest;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 
+import com.amazonaws.util.SdkHttpUtils;
+
 public class VelhoRequestSigner {
 	
-	static final String accessKey = ""; //System.getenv("velhoAccessKey");
-	static final String secretKey = "+l"; //System.getenv("velhoSecretKey");
+	static final String accessKey = System.getenv("velhoAccessKey");
+	static final String secretKey = System.getenv("velhoSecretKey");
 	
 	static void log(String s){
 		System.out.println(s);
@@ -46,7 +48,7 @@ public class VelhoRequestSigner {
 	    return new String(hexChars);
 	}
 	
-	static String getVelhoAuthKey(String method, String service, String host, String region, String requestParameters, String amzdate, String datestamp) throws Exception {
+	static String getVelhoAuthKey(String method, String service, String host, String region, String uri, String requestParameters, String amzdate, String datestamp) throws Exception {
 		
 		/*
 		 *  TASK 1: CREATE A CANONICAL REQUEST
@@ -54,8 +56,11 @@ public class VelhoRequestSigner {
 		// Step 1 is to define the verb (GET, POST, etc.)--already done.
 
 		// Step 2: Create canonical URI--the part of the URI from domain to query 
+		// Normalize URI paths according to RFC 3986. Remove redundant and relative path components. 
+		// Each path segment must be URI-encoded twice
 		// string (use '/' if no path)
-		String canonicalUri = "/";
+		String canonicalUri = SdkHttpUtils.urlEncode(uri, true);//"/";
+		
 
 		// Step 3: Create the canonical query string. In this example (a GET request),
 		// request parameters are in the query string. Query string values must
@@ -84,7 +89,7 @@ public class VelhoRequestSigner {
 
 		// Step 7: Combine elements to create canonical request
 		String canonicalRequest = method + "\n" + canonicalUri + "\n" + canonicalQuerystring + "\n" + canonicalHeaders + "\n" + signedHeaders + "\n" + payloadHash;
-		log("canonical request: " + canonicalRequest);
+		log("canonical request: \n" + canonicalRequest);
 		
 		/*
 		 * TASK 2: CREATE THE STRING TO SIGN
@@ -98,7 +103,7 @@ public class VelhoRequestSigner {
 		
 		// Combine
 		String stringToSign = algorithm + "\n" + amzdate + "\n" + credentialScope + "\n" + requestHash;
-		log("string to sign: " + stringToSign);
+		log("string to sign: \n" + stringToSign);
 		
 		/**
 		 * TASK 3: CALCULATE THE SIGNATURE

@@ -1,13 +1,8 @@
 package com.vayla.lambda.velho.metadata;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.MalformedURLException;
 import java.net.URL;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
+import java.util.Map;
 
 import com.amazonaws.regions.Regions;
 import com.amazonaws.services.lambda.runtime.Context;
@@ -15,6 +10,9 @@ import com.amazonaws.services.lambda.runtime.LambdaLogger;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3Client;
+import com.vayla.lambda.velho.metadata.auth.AWS4SignerBase;
+import com.vayla.lambda.velho.metadata.auth.AWS4SignerForAuthorizationHeader;
+import com.vayla.lambda.velho.metadata.utils.HttpUtils;
 
 public class LambdaFunctionHandler implements RequestHandler<Object, String> {
 	private AmazonS3 s3 = AmazonS3Client.builder().withRegion(Regions.EU_CENTRAL_1).build();
@@ -22,6 +20,8 @@ public class LambdaFunctionHandler implements RequestHandler<Object, String> {
 	static final String velhoAPI = "https://api.stg.velho.vayla.fi/v1/kohdeluokat"; //System.getenv("velhoAPI");
 	static final String velhoRegion = "eu-central-1"; //System.getenv("velhoRegion"); 
 	static final String velhoService = "execute-api"; // AWS API Gateway
+	static final String velhoAccessKey = System.getenv("velhoAccessKey");
+	static final String velhoSecretKey = System.getenv("velhoSecretKey");
 	LambdaLogger logger;
 
 	public LambdaFunctionHandler() {
@@ -41,22 +41,21 @@ public class LambdaFunctionHandler implements RequestHandler<Object, String> {
 	public String handleRequest(Object event, Context context) {
 		//this.logger = context.getLogger();
 		log("## Received event: " + event);
-		// Create a date for headers and the credential string
-		LocalDateTime t = LocalDateTime.now();
-		log(t.toString());
-		DateTimeFormatter format1 = DateTimeFormatter.ofPattern("YYYYMMDD'T'HHMMSS'Z'"); // Amzdate, The time stamp must be in UTC and in the following ISO 8601 format: YYYYMMDD'T'HHMMSS'Z'.
-		DateTimeFormatter format2 = DateTimeFormatter.ofPattern("YYYYMMDD"); // Date w/o time, used in credential scope
-		String amzdate = t.format(format1);
-		String datestamp = t.format(format2); 
 
 		try {
-			//TODO: luo allekirjoitusavain 
-			String authHeader = VelhoRequestSigner.getVelhoAuthKey("GET", velhoService, velhoHost, "eu-central-1", "", amzdate, datestamp);
+			// 1: luo headerit ja allekirjoitusavain 
+			AWS4SignerForAuthorizationHeader signer = new AWS4SignerForAuthorizationHeader(new URL(velhoAPI), "GET", velhoService, "eu-central-1");
+			Map<String, String> headers = new HashMap<String, String>();
+			Map<String, String> queryParams = new HashMap<String, String>();
+			String authHeader = signer.computeSignature(headers, queryParams, AWS4SignerBase.EMPTY_BODY_SHA256, velhoAccessKey, velhoSecretKey);
 			log(authHeader);
+			headers.put("Authorization", authHeader);
 			
-			// TODO: kutsu velhon rajapintaa
-			String jsonString = getMetadata(velhoAPI, authHeader, velhoHost, amzdate);
+			// 2: kutsu velhon rajapintaa
+			String jsonString = HttpUtils.invokeHttpRequest(new URL(velhoAPI), "GET", headers, null);
+			log("---------- RESPONSE ----------");
 			log(jsonString);
+			log("------------------------------");
 
 		} catch (Exception e) {
 			e.printStackTrace();
@@ -65,48 +64,5 @@ public class LambdaFunctionHandler implements RequestHandler<Object, String> {
 		}
 		
 		return "OK";
-	}
-
-	String getMetadata(String urlString, String authHeader, String host, String amzdate) {
-		StringBuilder sb = new StringBuilder();
-		sb.append("");
-		try {
-			URL url = new URL(urlString);
-			log("## Url created");
-			
-			HttpURLConnection httpconn = (HttpURLConnection) url.openConnection();
-			log("## Connection open");
-			
-			// The request can include any headers, but MUST include "host", "x-amz-date", 
-			// and (for this scenario) "Authorization". "host" and "x-amz-date" must
-			// be included in the canonical_headers and signed_headers, as noted
-			// earlier. Order here is not significant.
-			httpconn.setRequestMethod("GET");
-			httpconn.setRequestProperty("Authorization", authHeader);
-			httpconn.setRequestProperty("host", host);
-			httpconn.setRequestProperty("x-amz-date", amzdate);
-			log("## Connection properties set");
-			
-			BufferedReader br = new BufferedReader(new InputStreamReader(httpconn.getInputStream()));
-			String str = "";
-			while (null != (str = br.readLine())) {
-				sb.append(str);
-			}
-
-		} catch (MalformedURLException e) {
-			String errorMessage = "Error: Failed to create url from: " + urlString;
-			log(errorMessage);
-			e.printStackTrace();
-		} catch (IOException e) {
-			String errorMessage = "Error: Failed to open connection to: " + urlString;
-			log(errorMessage);
-			e.printStackTrace();
-		}
-		return sb.toString();
-	}
-	
-	public static void main(String[] args) {
-		LambdaFunctionHandler me = new LambdaFunctionHandler();
-		me.handleRequest(null, null);
 	}
 }
