@@ -7,22 +7,17 @@ import software.amazon.awscdk.core.Duration;
 import software.amazon.awscdk.core.Stack;
 import software.amazon.awscdk.core.StackProps;
 import software.amazon.awscdk.services.lambda.*;
-import software.amazon.awscdk.services.lambda.Runtime;
 import software.amazon.awscdk.services.s3.*;
 import software.amazon.awscdk.services.sns.Topic;
 import software.amazon.awscdk.services.sns.subscriptions.SqsSubscription;
+import software.amazon.awscdk.services.sns.subscriptions.EmailSubscription;
 import software.amazon.awscdk.services.sqs.Queue;
 import software.amazon.awscdk.services.stepfunctions.Activity;
 import software.amazon.awscdk.services.stepfunctions.Chain;
-import software.amazon.awscdk.services.stepfunctions.Choice;
-import software.amazon.awscdk.services.stepfunctions.Condition;
-import software.amazon.awscdk.services.stepfunctions.Fail;
 import software.amazon.awscdk.services.stepfunctions.StateMachine;
 import software.amazon.awscdk.services.stepfunctions.Task;
-import software.amazon.awscdk.services.stepfunctions.Wait;
-import software.amazon.awscdk.services.stepfunctions.WaitTime;
 import software.amazon.awscdk.services.stepfunctions.tasks.InvokeActivity;
-import software.amazon.awscdk.services.stepfunctions.tasks.InvokeFunction;
+import software.amazon.awscdk.services.s3.notifications.*;
 
 public class VelhoAnalyticsStack extends Stack {
         public VelhoAnalyticsStack(final Construct parent, final String id) {
@@ -45,14 +40,15 @@ public class VelhoAnalyticsStack extends Stack {
                                 .code(Code.fromAsset("lambdas" + File.separator + "eventpasser" + File.separator
                                                 + "target" + File.separator
                                                 + "lambda-java-evenpasser-1.0-SNAPSHOT.jar"))
-                                .runtime(Runtime.JAVA_8).handler("com.vayla.Lambdas.eventpasser.EventPass").build();
-                
+                                .runtime(software.amazon.awscdk.services.lambda.Runtime.JAVA_8)
+                                .handler("com.vayla.Lambdas.eventpasser.EventPass").build();
+
                 final Function getMetadataLambda = Function.Builder.create(this, "MetadataLoaderLambda")
-                		.functionName("VelhoMetadataLoader").timeout(Duration.minutes(5))
-                		.code(Code.fromAsset("lambdas" + File.separator + "velhometadata" + File.separator 
-                				+ "target" + File.separator
-                				+ "velho.metadata-1.0.0.jar"))
-                		.runtime(Runtime.JAVA_8).handler("com.vayla.lambda.velho.metadata.LambdaFunctionHandler").build();
+                                .functionName("VelhoMetadataLoader").timeout(Duration.minutes(5))
+                                .code(Code.fromAsset("lambdas" + File.separator + "velhometadata" + File.separator
+                                                + "target" + File.separator + "velho.metadata-1.0.0.jar"))
+                                .runtime(software.amazon.awscdk.services.lambda.Runtime.JAVA_8)
+                                .handler("com.vayla.lambda.velho.metadata.LambdaFunctionHandler").build();
 
                 final Queue queue = Queue.Builder.create(this, "VelhoAnalyticsQueue")
                                 .visibilityTimeout(Duration.seconds(300)).build();
@@ -60,21 +56,17 @@ public class VelhoAnalyticsStack extends Stack {
                 final Topic topic = Topic.Builder.create(this, "VelhoAnalyticsTopic")
                                 .displayName("DQL for Stepfunctions alert").build();
 
-                final BucketNotificationDestinationConfig bucketNotificationConfig = BucketNotificationDestinationConfig
-                                .builder().type(BucketNotificationDestinationType.LAMBDA)
-                                .arn(landingBucket.getBucketArn()).build();
+                NotificationKeyFilter ntfilter = NotificationKeyFilter.builder().prefix("/*").build();
 
-                // evenPasserLambda.BucketNotificationDestinationConfig(bucketNotificationConfig);
-                /*
-                 * EventSourceMapping eventsources =
-                 * EventSourceMapping.Builder.create(this,"mappings")
-                 * .eventSourceArn(landingBucket.getBucketArn()) .target(evenPasserLambda)
-                 * .build();
+                /**
+                 * Here we create notification to trigger lambda when any file is added to
+                 * bucket
                  */
+                landingBucket.addEventNotification(software.amazon.awscdk.services.s3.EventType.OBJECT_CREATED_PUT,
+                                new LambdaDestination(evenPasserLambda), ntfilter);
 
-                // landingBucket.addEventNotification(EventType.OBJECT_CREATED_PUT);
+                // topic.addSubscription(new EmailSubscription("")); /** */
 
-                topic.addSubscription(new SqsSubscription(queue));
                 //////// Step function
                 try {
 
@@ -83,11 +75,14 @@ public class VelhoAnalyticsStack extends Stack {
                         Task submitJob = Task.Builder.create(this, "Submit Job")
                                         .task(InvokeActivity.Builder.create(submitJobActivity).build())
                                         .resultPath("$.guid").build();
-                        
-                        // Task to invoke lambda (InvokeFunction) that will get metadata from Velho REST/API
+
+                        // Task to invoke lambda (InvokeFunction) that will get metadata from Velho
+                        // REST/API
                         Task getMetadataTask = Task.Builder.create(this, "MetadataLoderTask")
-                        		.task(InvokeFunction.Builder.create(getMetadataLambda).build())
-                        		.resultPath("$.guid").build();
+                                        // .task(InvokeFunction.Builder.create(getMetadataLambda).build())
+                                        // TODO this has to be fixed
+                                        .task(InvokeActivity.Builder.create(submitJobActivity).build())
+                                        .resultPath("$.guid").build();
 
                         Task convertToADE = Task.Builder.create(this, "convertToAde")
                                         .task(InvokeActivity.Builder.create(submitJobActivity).build())
@@ -108,7 +103,8 @@ public class VelhoAnalyticsStack extends Stack {
                          * .error("DescribeJob returned FAILED").build();
                          */
 
-                        Chain chain = Chain.start(submitJob).next(getMetadataTask).next(convertToADE).next(createManifest);
+                        Chain chain = Chain.start(submitJob).next(getMetadataTask).next(convertToADE)
+                                        .next(createManifest);
 
                         StateMachine.Builder.create(this, "StateMachine").definition(chain)
                                         .timeout(Duration.seconds(30)).build();
@@ -118,4 +114,5 @@ public class VelhoAnalyticsStack extends Stack {
                 }
 
         }
+
 }
