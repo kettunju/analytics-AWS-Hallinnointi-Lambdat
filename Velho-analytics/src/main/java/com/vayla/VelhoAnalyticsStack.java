@@ -34,135 +34,150 @@ import software.amazon.awscdk.services.stepfunctions.Task;
 import software.amazon.awscdk.services.stepfunctions.tasks.InvokeActivity;
 
 public class VelhoAnalyticsStack extends Stack {
-        public VelhoAnalyticsStack(final Construct parent, final String id) {
-                this(parent, id, null);
-        }
+	public VelhoAnalyticsStack(final Construct parent, final String id) {
+		this(parent, id, null);
+	}
 
-        public VelhoAnalyticsStack(final Construct parent, final String id, final StackProps props) {
-                super(parent, id, props);
+	public VelhoAnalyticsStack(final Construct parent, final String id, final StackProps props) {
+		super(parent, id, props);
 
-                final BucketProps s3BucketProps = BucketProps.builder().encryption(BucketEncryption.S3_MANAGED)
-                                .versioned(true)
-                                // .lifecycleRules(lifecycleRules) lets add this later so old files are cleared
-                                // after defined time
-                                .build();
+		final BucketProps s3BucketProps = BucketProps.builder().encryption(BucketEncryption.S3_MANAGED).versioned(true)
+				// .lifecycleRules(lifecycleRules) lets add this later so old files are cleared
+				// after defined time
+				.build();
 
-                Bucket landingBucket = new Bucket(this, "velholandingbucket", s3BucketProps);
-                Bucket workBucket = new Bucket(this, "velhoworkbucket", s3BucketProps);
+		Bucket landingBucket = new Bucket(this, "velholandingbucket", s3BucketProps);
+		Bucket workBucket = new Bucket(this, "velhoworkbucket", s3BucketProps);
 
-                final Function evenPasserLambda = Function.Builder.create(this, "EventPasser")
-                                .functionName("VelhoLandingBucketEventPasser").timeout(Duration.minutes(5))
-                                .code(Code.fromAsset("lambdas" + File.separator + "eventpasser" + File.separator
-                                                + "target" + File.separator
-                                                + "lambda-java-evenpasser-1.0-SNAPSHOT.jar"))
-                                .runtime(software.amazon.awscdk.services.lambda.Runtime.JAVA_8)
-                                .handler("com.vayla.Lambdas.eventpasser.EventPass").build();
+		final Function evenPasserLambda = Function.Builder.create(this, "EventPasser")
+				.functionName("VelhoLandingBucketEventPasser").timeout(Duration.minutes(5))
+				.code(Code.fromAsset("lambdas" + File.separator + "eventpasser" + File.separator + "target"
+						+ File.separator + "lambda-java-evenpasser-1.0-SNAPSHOT.jar"))
+				.runtime(software.amazon.awscdk.services.lambda.Runtime.JAVA_8)
+				.handler("com.vayla.Lambdas.eventpasser.EventPass").build();
 
-                // Metadataloderin ymparistomuuttujat 
-                // TODO: access ja secret key secrets managerista
-                SecretValue velhokeys = Secret.fromSecretArn(this, "velhoaccess", "arn:aws:secretsmanager:eu-central-1:426182641979:secret:stg/velho/api-XFpyMk").getSecretValue();
-                Map<String, String> secretMap = new HashMap<String, String>();
-                ObjectMapper objectMapper = new ObjectMapper();
-                try {
-					secretMap = objectMapper.readValue(velhokeys.toString(), HashMap.class);
-				} catch (JsonMappingException e1) {
-					// TODO Auto-generated catch block
-					System.err.println("Input could not be mapped to JSON");
-					e1.printStackTrace();
-				} catch (JsonProcessingException e1) {
-					// TODO Auto-generated catch block
-					System.err.println("Input could not be parsed to JSON");
-					e1.printStackTrace();
-				}
-                
-                Map<String, String> environment = new HashMap<String, String>();
-                environment.put("velhoHost", "api.stg.velho.vayla.fi");
-                environment.put("workBucket", workBucket.getBucketName());
-                // lisataan velho api tunnukset sellaisenaan secrets managerista
-                for(String i : secretMap.keySet()) {
-                	environment.put(i, secretMap.get(i));
-                }
-                
-                final Function getMetadataLambda = Function.Builder.create(this, "MetadataLoaderLambda")
-                                .functionName("VelhoMetadataLoader").timeout(Duration.minutes(5)).memorySize(1024)
-                                .code(Code.fromAsset("lambdas" + File.separator + "velhometadata" + File.separator
-                                                + "target" + File.separator + "velho.metadata-1.0.0.jar"))
-                                .runtime(software.amazon.awscdk.services.lambda.Runtime.JAVA_8)
-                                .environment(environment)
-                                .handler("com.vayla.lambda.velho.metadata.LambdaFunctionHandler").build();
-                // lisataan kayttooikeudet workbuckettiin
-                // TODO: korjattava, nyt on kaikki oikeudet kaikkiin resursseihin !!
-                getMetadataLambda.addToRolePolicy(PolicyStatement.Builder.create()
-                        .effect(Effect.ALLOW)
-                        .actions(Arrays.asList("*"))
-                        //.resources(Arrays.asList(workBucket.getBucketArn()))
-                        .resources(Arrays.asList("*"))
-                        .build());
-              
+		// Metadataloderin ymparistomuuttujat
+		Map<String, String> environment = new HashMap<String, String>();
+		environment.put("velhoHost", "api.stg.velho.vayla.fi");
+		environment.put("workBucket", workBucket.getBucketName());
 
-                final Queue queue = Queue.Builder.create(this, "VelhoAnalyticsQueue")
-                                .visibilityTimeout(Duration.seconds(300)).build();
 
-                final Topic topic = Topic.Builder.create(this, "VelhoAnalyticsTopic")
-                                .displayName("DQL for Stepfunctions alert").build();
+		final Function getMetadataLambda = Function.Builder.create(this, "MetadataLoaderLambda")
+				.functionName("VelhoMetadataLoader").timeout(Duration.minutes(5)).memorySize(1024)
+				.code(Code.fromAsset("lambdas" + File.separator + "velhometadata" + File.separator + "target"
+						+ File.separator + "velho.metadata-1.0.0.jar"))
+				.runtime(software.amazon.awscdk.services.lambda.Runtime.JAVA_8).environment(environment)
+				.handler("com.vayla.lambda.velho.metadata.LambdaFunctionHandler").build();
+		// lisataan kayttooikeudet workbuckettiin
+		// TODO: korjattava rajoitetummaksi, nyt on kaikki oikeudet kaikkiin bucketteihin
+		getMetadataLambda
+				.addToRolePolicy(PolicyStatement.Builder.create()
+						.effect(Effect.ALLOW).actions(Arrays.asList("s3:*"))
+						// .resources(Arrays.asList(workBucket.getBucketArn()))
+						.resources(Arrays.asList("*")).build());
 
-                NotificationKeyFilter ntfilter = NotificationKeyFilter.builder().prefix("/*").build();
+		
+		// Dataloader ymparistomuuttujat
+		// eli pelkka workbucket, jos / kun raakadatan sijainti tulee
+		// triggerin s3eventissa
+		environment = new HashMap<String, String>();
+		environment.put("workbucket", workBucket.getBucketName());
+		environment.put("debug", "false");
+		
+		final Function velhoDataLoderLambda = Function.Builder.create(this, "DataLoaderLambda")
+				.functionName("VelhoDataLoader").timeout(Duration.minutes(5)).memorySize(1024)
+				.code(Code.fromAsset("lambdas" + File.separator + "velhodataloader" + File.separator + "target"
+						+ File.separator + "velho.dataloader-1.0.0.jar"))
+				.runtime(software.amazon.awscdk.services.lambda.Runtime.JAVA_8).environment(environment)
+				.handler("com.vayla.lambda.velho.dataloader.LambdaFunctionHandler").build();
 
-                /**
-                 * Here we create notification to trigger lambda when any file is added to
-                 * bucket
-                 */
-                landingBucket.addEventNotification(software.amazon.awscdk.services.s3.EventType.OBJECT_CREATED_PUT,
-                                new LambdaDestination(evenPasserLambda), ntfilter);
+		// lisataan kayttooikeudet kaikkiin bucketteihin
+		// todo: rajatut bucketit
+		velhoDataLoderLambda
+				.addToRolePolicy(PolicyStatement.Builder.create()
+						.effect(Effect.ALLOW)
+						.actions(Arrays.asList("s3:*"))
+						.resources(Arrays.asList("*")).build());
+		
+		
+		// Collector (raakadan haku) ymparistomuuttujat
+		environment = new HashMap<String, String>();
+		environment.put("velhodataurl", "http://latauspalvelu.stg.velho.vayla.fi/viimeisin/varustetiedot/kaiteet.json"); //velho latauspalvelu
+		environment.put("landingbucket", landingBucket.getBucketName()); // raakadatan landing bucket, josta triggerit kasittely lambdoihin
+		
+		final Function velhoCollectorLambda = Function.Builder.create(this, "CollectorLambda")
+				.functionName("VelhoCollector").timeout(Duration.minutes(5)).memorySize(1024)
+				.code(Code.fromAsset("lambdas" + File.separator + "velhocollector" + File.separator + "target"
+						+ File.separator + "velho.collector-1.0.0.jar"))
+				.runtime(software.amazon.awscdk.services.lambda.Runtime.JAVA_8).environment(environment)
+				.handler("com.vayla.lambda.velho.dataloader.LambdaFunctionHandler").build();
+		
+		// lisataan kayttooikeudet kaikkiin bucketteihin
+		// todo: rajatut bucketit
+		velhoCollectorLambda
+				.addToRolePolicy(PolicyStatement.Builder.create()
+						.effect(Effect.ALLOW)
+						.actions(Arrays.asList("s3:*"))
+						.resources(Arrays.asList("*")).build());
 
-                // topic.addSubscription(new EmailSubscription("")); /** */
+		// viestinvalitys
+		final Queue queue = Queue.Builder.create(this, "VelhoAnalyticsQueue").visibilityTimeout(Duration.seconds(300))
+				.build();
 
-                //////// Step function
-                try {
+		final Topic topic = Topic.Builder.create(this, "VelhoAnalyticsTopic").displayName("DQL for Stepfunctions alert")
+				.build();
 
-                        Activity submitJobActivity = Activity.Builder.create(this, "SubmitJob").build();
+		NotificationKeyFilter ntfilter = NotificationKeyFilter.builder().prefix("/*").build();
 
-                        Task submitJob = Task.Builder.create(this, "Submit Job")
-                                        .task(InvokeActivity.Builder.create(submitJobActivity).build())
-                                        .resultPath("$.guid").build();
+		/**
+		 * Here we create notification to trigger lambda when any file is added to
+		 * bucket
+		 */
+		landingBucket.addEventNotification(software.amazon.awscdk.services.s3.EventType.OBJECT_CREATED_PUT,
+				new LambdaDestination(evenPasserLambda), ntfilter);
 
-                        // Task to invoke lambda (InvokeFunction) that will get metadata from Velho
-                        // REST/API
-                        Task getMetadataTask = Task.Builder.create(this, "MetadataLoderTask")
-                                        // .task(InvokeFunction.Builder.create(getMetadataLambda).build())
-                                        // TODO this has to be fixed
-                                        .task(InvokeActivity.Builder.create(submitJobActivity).build())
-                                        .resultPath("$.guid").build();
+		// topic.addSubscription(new EmailSubscription("")); /** */
 
-                        Task convertToADE = Task.Builder.create(this, "convertToAde")
-                                        .task(InvokeActivity.Builder.create(submitJobActivity).build())
-                                        .resultPath("$.guid").build();
+		//////// Step function
+		try {
 
-                        Task createManifest = Task.Builder.create(this, "Create Manifest")
-                                        .task(InvokeActivity.Builder.create(submitJobActivity).build())
-                                        .resultPath("$.guid").build();
+			Activity submitJobActivity = Activity.Builder.create(this, "SubmitJob").build();
 
-                        Task getStatus = Task.Builder.create(this, "NotYetUsederror checking")
-                                        .task(InvokeActivity.Builder.create(submitJobActivity).build())
-                                        .inputPath("$.guid").resultPath("$.status").build();
+			Task submitJob = Task.Builder.create(this, "Submit Job")
+					.task(InvokeActivity.Builder.create(submitJobActivity).build()).resultPath("$.guid").build();
 
-                        // Choice isComplete = Choice.Builder.create(this, "Job Complete?").build();
-                        /*
-                         * Fail jobFailed = Fail.Builder.create(this,
-                         * "Job Failed").cause("AWS Batch Job Failed")
-                         * .error("DescribeJob returned FAILED").build();
-                         */
+			// Task to invoke lambda (InvokeFunction) that will get metadata from Velho
+			// REST/API
+			Task getMetadataTask = Task.Builder.create(this, "MetadataLoderTask")
+					// .task(InvokeFunction.Builder.create(getMetadataLambda).build())
+					// TODO this has to be fixed
+					.task(InvokeActivity.Builder.create(submitJobActivity).build()).resultPath("$.guid").build();
 
-                        Chain chain = Chain.start(submitJob).next(getMetadataTask).next(convertToADE)
-                                        .next(createManifest);
+			Task convertToADE = Task.Builder.create(this, "convertToAde")
+					.task(InvokeActivity.Builder.create(submitJobActivity).build()).resultPath("$.guid").build();
 
-                        StateMachine.Builder.create(this, "StateMachine").definition(chain)
-                                        .timeout(Duration.seconds(30)).build();
+			Task createManifest = Task.Builder.create(this, "Create Manifest")
+					.task(InvokeActivity.Builder.create(submitJobActivity).build()).resultPath("$.guid").build();
 
-                } catch (Exception e) {
-                        e.printStackTrace();
-                }
+			Task getStatus = Task.Builder.create(this, "NotYetUsederror checking")
+					.task(InvokeActivity.Builder.create(submitJobActivity).build()).inputPath("$.guid")
+					.resultPath("$.status").build();
 
-        }
+			// Choice isComplete = Choice.Builder.create(this, "Job Complete?").build();
+			/*
+			 * Fail jobFailed = Fail.Builder.create(this,
+			 * "Job Failed").cause("AWS Batch Job Failed")
+			 * .error("DescribeJob returned FAILED").build();
+			 */
+
+			Chain chain = Chain.start(submitJob).next(getMetadataTask).next(convertToADE).next(createManifest);
+
+			StateMachine.Builder.create(this, "StateMachine").definition(chain).timeout(Duration.seconds(30)).build();
+
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+
+	}
 
 }
