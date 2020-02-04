@@ -10,12 +10,15 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.util.Map;
+import java.util.zip.GZIPInputStream;
 
 /**
  * Various Http helper routines
  */
 public class HttpUtils {
 
+	static final String ENCODING_GZIP = "gzip";
+	
     /**
      * Makes a http request to the specified endpoint
      */
@@ -24,6 +27,14 @@ public class HttpUtils {
                                          Map<String, String> headers,
                                          String requestBody) {
         HttpURLConnection connection = createHttpConnection(endpointUrl, httpMethod, headers);
+        
+        String enc = connection.getContentEncoding();
+        String type = connection.getContentType();
+        int len = connection.getContentLength();
+        System.out.println("## encoding: " + enc);
+        System.out.println("## content type: " + type);
+        System.out.println("## content length: " + len);
+        
         try {
             if ( requestBody != null ) {
                 DataOutputStream wr = new DataOutputStream(
@@ -40,10 +51,13 @@ public class HttpUtils {
     
     public static String executeHttpRequest(HttpURLConnection connection) {
         try {
+        	String encoding = connection.getContentEncoding();
             // Get Response
             InputStream is;
             try {
-                is = connection.getInputStream();
+            	// some velho responses like data queries can be compressed
+            	if(encoding.equals(ENCODING_GZIP)) is = new GZIPInputStream(connection.getInputStream());
+            	else is = connection.getInputStream();
             } catch (IOException e) {
                 is = connection.getErrorStream();
             }

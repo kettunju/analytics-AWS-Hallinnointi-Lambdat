@@ -134,49 +134,9 @@ public class VelhoAnalyticsStack extends Stack {
 		 * bucket
 		 */
 		landingBucket.addEventNotification(software.amazon.awscdk.services.s3.EventType.OBJECT_CREATED_PUT,
-				new LambdaDestination(evenPasserLambda), ntfilter);
+				new LambdaDestination(velhoDataLoderLambda), ntfilter);
 
 		// topic.addSubscription(new EmailSubscription("")); /** */
-
-		//////// Step function
-		try {
-
-			Activity submitJobActivity = Activity.Builder.create(this, "SubmitJob").build();
-
-			Task submitJob = Task.Builder.create(this, "Submit Job")
-					.task(InvokeActivity.Builder.create(submitJobActivity).build()).resultPath("$.guid").build();
-
-			// Task to invoke lambda (InvokeFunction) that will get metadata from Velho
-			// REST/API
-			Task getMetadataTask = Task.Builder.create(this, "MetadataLoderTask")
-					// .task(InvokeFunction.Builder.create(getMetadataLambda).build())
-					// TODO this has to be fixed
-					.task(InvokeActivity.Builder.create(submitJobActivity).build()).resultPath("$.guid").build();
-
-			Task convertToADE = Task.Builder.create(this, "convertToAde")
-					.task(InvokeActivity.Builder.create(submitJobActivity).build()).resultPath("$.guid").build();
-
-			Task createManifest = Task.Builder.create(this, "Create Manifest")
-					.task(InvokeActivity.Builder.create(submitJobActivity).build()).resultPath("$.guid").build();
-
-			Task getStatus = Task.Builder.create(this, "NotYetUsederror checking")
-					.task(InvokeActivity.Builder.create(submitJobActivity).build()).inputPath("$.guid")
-					.resultPath("$.status").build();
-
-			// Choice isComplete = Choice.Builder.create(this, "Job Complete?").build();
-			/*
-			 * Fail jobFailed = Fail.Builder.create(this,
-			 * "Job Failed").cause("AWS Batch Job Failed")
-			 * .error("DescribeJob returned FAILED").build();
-			 */
-
-			Chain chain = Chain.start(submitJob).next(getMetadataTask).next(convertToADE).next(createManifest);
-
-			StateMachine.Builder.create(this, "StateMachine").definition(chain).timeout(Duration.seconds(30)).build();
-
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
 
 	}
 
