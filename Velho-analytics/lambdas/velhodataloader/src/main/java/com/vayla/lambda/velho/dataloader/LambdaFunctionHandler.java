@@ -9,8 +9,10 @@ import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.zip.GZIPInputStream;
 
 import org.apache.commons.io.FilenameUtils;
+import org.apache.commons.lang3.StringUtils;
 
 import com.amazonaws.SdkClientException;
 import com.amazonaws.regions.Regions;
@@ -37,7 +39,7 @@ import com.vayla.lambda.velho.dataloader.ade.AdeManifestHelper;
 
 public class LambdaFunctionHandler implements RequestHandler<S3Event, String> {
 
-	static final boolean DEBUG = true;
+	static final String debug = System.getenv("debug");
 	static final String zip_encoding = "gzip";
 	static final String csv_content_type = "text/csv";
 	static final String manifest_content_type = "application/json";
@@ -59,7 +61,7 @@ public class LambdaFunctionHandler implements RequestHandler<S3Event, String> {
     }
     
     void debug(String s) {
-    	if(DEBUG) log(s);
+    	if(!StringUtils.isEmpty(debug) && debug.equalsIgnoreCase("true")) log(s);
     }
 
     /**
@@ -106,6 +108,7 @@ public class LambdaFunctionHandler implements RequestHandler<S3Event, String> {
 				csvSchemaBuilder.addColumn(fieldName);
 				headers.add(fieldName);
 			});
+			// TODO: withHeader jatetaan pois, kun manifest ym valmiit ADE:a varten
 			CsvSchema csvSchema = csvSchemaBuilder.build().withHeader();
 			
 			ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -118,8 +121,10 @@ public class LambdaFunctionHandler implements RequestHandler<S3Event, String> {
 			
 			debug("## csv written to bytes " + System.currentTimeMillis());
 			
-			// tallennetaan csv s3 buckettiin data "kansioon" zipatuksi csv:ksi
-			String key = "data/" + srcKey + ".csv.gz";
+			// tallennetaan csv s3 work buckettiin samaan "kansioon" ts. prefixilla kuin
+			// alkuperainen zipatuksi csv:ksi
+			// velhosta haettu data lotyy ns. landing bucketista ja key on muotoa data/ddmmyy(tai viimeisi)/varustetiedot/
+			String key = srcKey + ".csv.gz";
 			// Zip it
     		byte[] zippedData = GzipString.compress(out.toByteArray());
     		// save it
@@ -180,11 +185,16 @@ public class LambdaFunctionHandler implements RequestHandler<S3Event, String> {
     	List<String> ndJsonRivit = new ArrayList<String>();
     	String line;
     	S3Object response = s3.getObject(new GetObjectRequest(bucket, key));
+    	String encoding = response.getObjectMetadata().getContentEncoding();
         InputStream is = response.getObjectContent();
-    	BufferedReader rd = new BufferedReader(new InputStreamReader(is));
-    	System.out.println(System.currentTimeMillis());
+        
     	try {
+    		if(encoding.equals(zip_encoding)) is = new GZIPInputStream(is);
+        	BufferedReader rd = new BufferedReader(new InputStreamReader(is));
+        	System.out.println(System.currentTimeMillis());
+        	
 	    	rd.readLine(); // hypataan metatieto rivi
+	    	
 	        while ((line = rd.readLine()) != null) {
 	        	ndJsonRivit.add(line);
 	        }
@@ -194,9 +204,8 @@ public class LambdaFunctionHandler implements RequestHandler<S3Event, String> {
     		logger.log("## Error reading file from S3 ");
     	}
 	        
-        //System.out.println("## kaiteet " + kaiteet.size());
-        System.out.println("## ndjsonrivit " + ndJsonRivit.size());
-        System.out.println(System.currentTimeMillis());
+        log("## ndjsonrivit " + ndJsonRivit.size());
+        debug("## " + System.currentTimeMillis());
         
         return ndJsonRivit;
     	
