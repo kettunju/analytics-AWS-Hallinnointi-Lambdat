@@ -15,6 +15,10 @@ import software.amazon.awscdk.core.Duration;
 import software.amazon.awscdk.core.SecretValue;
 import software.amazon.awscdk.core.Stack;
 import software.amazon.awscdk.core.StackProps;
+import software.amazon.awscdk.services.events.CronOptions;
+import software.amazon.awscdk.services.events.Rule;
+import software.amazon.awscdk.services.events.Schedule;
+import software.amazon.awscdk.services.events.targets.LambdaFunction;
 import software.amazon.awscdk.services.iam.Effect;
 import software.amazon.awscdk.services.iam.PolicyStatement;
 import software.amazon.awscdk.services.lambda.Code;
@@ -27,6 +31,7 @@ import software.amazon.awscdk.services.s3.notifications.LambdaDestination;
 import software.amazon.awscdk.services.secretsmanager.Secret;
 import software.amazon.awscdk.services.sns.Topic;
 import software.amazon.awscdk.services.sqs.Queue;
+import software.amazon.awscdk.services.ssm.CfnMaintenanceWindowTarget.TargetsProperty;
 import software.amazon.awscdk.services.stepfunctions.Activity;
 import software.amazon.awscdk.services.stepfunctions.Chain;
 import software.amazon.awscdk.services.stepfunctions.StateMachine;
@@ -60,6 +65,8 @@ public class VelhoAnalyticsStack extends Stack {
 		Map<String, String> environment = new HashMap<String, String>();
 		environment.put("velhoHost", "api.stg.velho.vayla.fi");
 		environment.put("workBucket", workBucket.getBucketName());
+		environment.put("metadataprefix", "metadata/");
+		environment.put("landingbucket", landingBucket.getBucketName()); // raakadatan landing bucket, josta triggerit kasittely lambdoihin
 
 
 		final Function getMetadataLambda = Function.Builder.create(this, "MetadataLoaderLambda")
@@ -69,8 +76,30 @@ public class VelhoAnalyticsStack extends Stack {
 				.runtime(software.amazon.awscdk.services.lambda.Runtime.JAVA_8).environment(environment)
 				.handler("com.vayla.lambda.velho.metadata.LambdaFunctionHandler").build();
 		// lisataan kayttooikeudet workbuckettiin
-		// TODO: korjattava rajoitetummaksi, nyt on kaikki oikeudet kaikkiin bucketteihin
+		// TODO: rajatut bucketit?
 		getMetadataLambda
+				.addToRolePolicy(PolicyStatement.Builder.create()
+						.effect(Effect.ALLOW).actions(Arrays.asList("s3:*"))
+						// .resources(Arrays.asList(workBucket.getBucketArn()))
+						.resources(Arrays.asList("*")).build());
+		
+		// Metadataloderin ymparistomuuttujat
+		environment = new HashMap<String, String>();
+		environment.put("schema_versio", "1");
+		environment.put("debug", "true");
+		environment.put("workbucket", workBucket.getBucketName());
+		environment.put("adeBucket", "file-load-ade-runtime-dev");
+
+
+		final Function convertMetadataLambda = Function.Builder.create(this, "MetadataConverterLambda")
+				.functionName("VelhoMetadataConverter").timeout(Duration.minutes(5)).memorySize(1024)
+				.code(Code.fromAsset("lambdas" + File.separator + "velhometadataconverter" + File.separator + "target"
+						+ File.separator + "velho.metadata.converter-1.0.0.jar"))
+				.runtime(software.amazon.awscdk.services.lambda.Runtime.JAVA_8).environment(environment)
+				.handler("com.vayla.lambda.velho.metadata.LambdaFunctionHandler").build();
+		// lisataan kayttooikeudet workbuckettiin
+		// TODO: rajatut bucketit?
+		convertMetadataLambda
 				.addToRolePolicy(PolicyStatement.Builder.create()
 						.effect(Effect.ALLOW).actions(Arrays.asList("s3:*"))
 						// .resources(Arrays.asList(workBucket.getBucketArn()))
@@ -82,6 +111,8 @@ public class VelhoAnalyticsStack extends Stack {
 		// triggerin s3eventissa
 		environment = new HashMap<String, String>();
 		environment.put("workbucket", workBucket.getBucketName());
+		environment.put("adebucket", "livi-ade-dev-runtime-dagger-notifications");
+		environment.put("databucket", "file-load-ade-runtime-dev");
 		environment.put("debug", "false");
 		
 		final Function velhoDataLoderLambda = Function.Builder.create(this, "DataLoaderLambda")
@@ -92,7 +123,7 @@ public class VelhoAnalyticsStack extends Stack {
 				.handler("com.vayla.lambda.velho.dataloader.LambdaFunctionHandler").build();
 
 		// lisataan kayttooikeudet kaikkiin bucketteihin
-		// todo: rajatut bucketit
+		// todo: rajatut bucketit?
 		velhoDataLoderLambda
 				.addToRolePolicy(PolicyStatement.Builder.create()
 						.effect(Effect.ALLOW)
@@ -113,7 +144,7 @@ public class VelhoAnalyticsStack extends Stack {
 				.handler("com.vayla.lambda.velho.dataloader.LambdaFunctionHandler").build();
 		
 		// lisataan kayttooikeudet kaikkiin bucketteihin
-		// todo: rajatut bucketit
+		// todo: rajatut bucketit?
 		velhoCollectorLambda
 				.addToRolePolicy(PolicyStatement.Builder.create()
 						.effect(Effect.ALLOW)
@@ -127,15 +158,40 @@ public class VelhoAnalyticsStack extends Stack {
 		final Topic topic = Topic.Builder.create(this, "VelhoAnalyticsTopic").displayName("DQL for Stepfunctions alert")
 				.build();
 
-		NotificationKeyFilter ntfilter = NotificationKeyFilter.builder().prefix("/*").build();
+		
 
 		/**
-		 * Here we create notification to trigger lambda when any file is added to
+		 * Here we create notification to trigger lambda when velho data file is added to landing
 		 * bucket
 		 */
+		NotificationKeyFilter filter4data = NotificationKeyFilter.builder().prefix("data/").build();
 		landingBucket.addEventNotification(software.amazon.awscdk.services.s3.EventType.OBJECT_CREATED_PUT,
-				new LambdaDestination(velhoDataLoderLambda), ntfilter);
+				new LambdaDestination(velhoDataLoderLambda), filter4data);
+		
+		
+		
+		// and a trigger for metadata files
+		NotificationKeyFilter filter4metadata = NotificationKeyFilter.builder().prefix("metadata/").build();
+		landingBucket.addEventNotification(software.amazon.awscdk.services.s3.EventType.OBJECT_CREATED_PUT,
+				new LambdaDestination(convertMetadataLambda), filter4metadata);
 
+		// ajasta datan lataus joka paiva 06:15
+		Rule dailyRule = Rule.Builder.create(this, "DataSchedule").enabled(true)
+		.description("Velho data load schedule")
+		.schedule(Schedule.expression("cron(15 6 * * ? *)"))
+		.build();
+		
+		dailyRule.addTarget(LambdaFunction.Builder.create(velhoCollectorLambda).build());
+		
+		// ajasta metadatan lataus joka paiva 06:05
+		Rule dailyRule2 = Rule.Builder.create(this, "MetaDataSchedule").enabled(true)
+		.description("Velho metadata load schedule")
+		.schedule(Schedule.expression("cron(05 6 * * ? *)"))
+		.build();
+		
+		dailyRule2.addTarget(LambdaFunction.Builder.create(getMetadataLambda).build());
+		
+		
 		// topic.addSubscription(new EmailSubscription("")); /** */
 
 	}

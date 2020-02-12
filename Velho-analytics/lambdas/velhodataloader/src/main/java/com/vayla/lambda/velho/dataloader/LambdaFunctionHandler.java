@@ -31,6 +31,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.csv.CsvMapper;
 import com.fasterxml.jackson.dataformat.csv.CsvSchema;
 import com.fasterxml.jackson.dataformat.csv.CsvSchema.Builder;
+import com.fasterxml.jackson.dataformat.csv.CsvGenerator;
 import com.github.wnameless.json.flattener.JsonFlattener;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -46,6 +47,8 @@ public class LambdaFunctionHandler implements RequestHandler<S3Event, String> {
 	//static final String velhoS3Bucket = System.getenv("s3bucket");
 	//static final String velhoS3Key = System.getenv("s3key");
 	static final String workBucket = System.getenv("workbucket");
+	static final String adeBucket = System.getenv("adebucket");
+	static final String dataBucket = System.getenv("databucket");
 	private AmazonS3 s3 = AmazonS3ClientBuilder.standard().withRegion(Regions.EU_CENTRAL_1).build();
     LambdaLogger logger;
 
@@ -108,13 +111,17 @@ public class LambdaFunctionHandler implements RequestHandler<S3Event, String> {
 				csvSchemaBuilder.addColumn(fieldName);
 				headers.add(fieldName);
 			});
-			// TODO: withHeader jatetaan pois, kun manifest ym valmiit ADE:a varten
-			CsvSchema csvSchema = csvSchemaBuilder.build().withHeader();
+			// withHeader jatetaan pois, kun manifest ym valmiit ADE:a varten
+			CsvSchema csvSchema = csvSchemaBuilder
+					.build()
+					.withLineSeparator("\r\n")
+					.withoutHeader(); //.withHeader();
 			
 			ByteArrayOutputStream out = new ByteArrayOutputStream();
 			
 			// kirjoitetaan csv muistiin
 			CsvMapper csvMapper = new CsvMapper();
+			csvMapper.configure(CsvGenerator.Feature.ALWAYS_QUOTE_STRINGS, true); //ADE needs enclosing quotes for values?
 			csvMapper.writerFor(JsonNode.class)
 			  .with(csvSchema)
 			  .writeValue(out,jsonNode);
@@ -124,7 +131,12 @@ public class LambdaFunctionHandler implements RequestHandler<S3Event, String> {
 			// tallennetaan csv s3 work buckettiin samaan "kansioon" ts. prefixilla kuin
 			// alkuperainen zipatuksi csv:ksi
 			// velhosta haettu data lotyy ns. landing bucketista ja key on muotoa data/ddmmyy(tai viimeisi)/varustetiedot/
-			String key = srcKey + ".csv.gz";
+			
+			//String key = srcKey + ".csv.gz";
+			
+			// TODO: jatkokehityksena miten sailyttaa yleiskaytettavyys 
+			// velhosta tulevien datatiedostojen tunnistamisessa ja nimeamisessa ADE-muotoon
+			String csvfilekey = "manifest/velho_kaide/table.velho_kaide." + System.currentTimeMillis() + ".csv.gz";
 			// Zip it
     		byte[] zippedData = GzipString.compress(out.toByteArray());
     		// save it
@@ -133,28 +145,32 @@ public class LambdaFunctionHandler implements RequestHandler<S3Event, String> {
     		csvMetadata.setContentLength(zippedData.length);
     		csvMetadata.setContentEncoding(zip_encoding);
     		
+    		// kohteeksi ade loader bucket
     		debug("## save object " + System.currentTimeMillis());
-			saveObject(workBucket, key, zippedData, csvMetadata);
+			saveObject(dataBucket, csvfilekey, zippedData, csvMetadata);
 			debug("## object saved " + System.currentTimeMillis());
 			
 			// manifestin luonti ja tallennus
-			URL s3url = s3.getUrl(workBucket, key);
+			URL s3url = s3.getUrl(adeBucket, csvfilekey);
 			String fulls3name = getS3KeyFromURL(s3url);
 			String prefix = FilenameUtils.getPath(fulls3name);
 			String filename = FilenameUtils.getBaseName(fulls3name);
-			String manifestFilename = "manifest-"+filename+".json";
+			String manifestFilename = "manifest-"+filename+".gz.json";
 			String fullManifestFilename = prefix + manifestFilename;
 			log("## manifest filename " + fullManifestFilename);
 			
+			String csvurl = "s3://" + dataBucket + "/" + csvfilekey;
+			log("## csvurl " + csvurl);
+			
 			List<String> urls = new ArrayList<String>();
-			urls.add(s3url.toString());
+			urls.add(csvurl);
 			String manifestjson = AdeManifestHelper.createManifest(urls, headers);
 			log("## " + manifestjson);
 			byte[] manifestdata = manifestjson.getBytes();
 			ObjectMetadata manifestMetadata = new ObjectMetadata();
     		manifestMetadata.setContentLength(manifestdata.length);
     		manifestMetadata.setContentType(manifest_content_type);
-			saveObject(workBucket, fullManifestFilename, manifestdata, manifestMetadata);
+			saveObject(dataBucket, fullManifestFilename, manifestdata, manifestMetadata);
             
         } catch (Exception e) {
             e.printStackTrace();

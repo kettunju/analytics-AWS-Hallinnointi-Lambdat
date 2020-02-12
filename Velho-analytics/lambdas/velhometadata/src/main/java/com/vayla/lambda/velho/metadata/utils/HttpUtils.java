@@ -12,6 +12,8 @@ import java.net.URLEncoder;
 import java.util.Map;
 import java.util.zip.GZIPInputStream;
 
+import com.amazonaws.util.StringUtils;
+
 /**
  * Various Http helper routines
  */
@@ -56,7 +58,7 @@ public class HttpUtils {
             InputStream is;
             try {
             	// some velho responses like data queries can be compressed
-            	if(encoding.equals(ENCODING_GZIP)) is = new GZIPInputStream(connection.getInputStream());
+            	if(!StringUtils.isNullOrEmpty(encoding) && encoding.equals(ENCODING_GZIP)) is = new GZIPInputStream(connection.getInputStream());
             	else is = connection.getInputStream();
             } catch (IOException e) {
                 is = connection.getErrorStream();

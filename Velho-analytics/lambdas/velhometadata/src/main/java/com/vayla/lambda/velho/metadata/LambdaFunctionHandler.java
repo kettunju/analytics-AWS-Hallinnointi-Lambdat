@@ -23,6 +23,8 @@ public class LambdaFunctionHandler implements RequestHandler<Object, String> {
 	static final String velhoAccessKey = System.getenv("velhoAccessKey");
 	static final String velhoSecretKey = System.getenv("velhoSecretKey");
 	static final String velhoWorkBucket = System.getenv("workBucket");
+	static final String velhoWorkBucketPrefix = System.getenv("metadataprefix");
+	static final String landingBucket = System.getenv("landingbucket");
 	LambdaLogger logger;
 
 	public LambdaFunctionHandler() {
@@ -75,7 +77,8 @@ public class LambdaFunctionHandler implements RequestHandler<Object, String> {
 				log("## recieved key");
 				log(key);
 				log("## key end");
-				saveJSONToS3(key, jsonString);
+				//add metadata prefix
+				saveJSONToS3(velhoWorkBucketPrefix + key, jsonString);
 			}
 
 		} catch (Exception e) {
@@ -108,7 +111,7 @@ public class LambdaFunctionHandler implements RequestHandler<Object, String> {
         log("*        Executing       'saveJSONToS3'        *");
         log("************************************************");
                 
-        s3.putObject(velhoWorkBucket, key.toString(), json);
+        s3.putObject(landingBucket, key, json);
         
 	}
 }
