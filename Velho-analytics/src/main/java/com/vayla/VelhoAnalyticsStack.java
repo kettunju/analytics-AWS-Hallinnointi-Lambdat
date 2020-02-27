@@ -159,7 +159,6 @@ public class VelhoAnalyticsStack extends Stack {
 				.build();
 
 		
-
 		/**
 		 * Here we create notification to trigger lambda when velho data file is added to landing
 		 * bucket
@@ -178,7 +177,7 @@ public class VelhoAnalyticsStack extends Stack {
 		// ajasta datan lataus joka paiva 06:15
 		Rule dailyRule = Rule.Builder.create(this, "DataSchedule").enabled(true)
 		.description("Velho data load schedule")
-		.schedule(Schedule.expression("cron(15 6 * * ? *)"))
+		.schedule(Schedule.expression("cron(15 4 * * ? *)"))
 		.build();
 		
 		dailyRule.addTarget(LambdaFunction.Builder.create(velhoCollectorLambda).build());
@@ -186,7 +185,7 @@ public class VelhoAnalyticsStack extends Stack {
 		// ajasta metadatan lataus joka paiva 06:05
 		Rule dailyRule2 = Rule.Builder.create(this, "MetaDataSchedule").enabled(true)
 		.description("Velho metadata load schedule")
-		.schedule(Schedule.expression("cron(05 6 * * ? *)"))
+		.schedule(Schedule.expression("cron(05 4 * * ? *)"))
 		.build();
 		
 		dailyRule2.addTarget(LambdaFunction.Builder.create(getMetadataLambda).build());

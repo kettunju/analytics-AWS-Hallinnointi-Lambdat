@@ -16,4 +16,15 @@ It is a [Maven](https://maven.apache.org/) based project, so you can open this p
  * `cdk diff`        compare deployed stack with current state
  * `cdk docs`        open CDK documentation
 
-Enjoy!
+## Build and deploy
+ * First build and package all the lambdas that need to be (re)delpoyed
+    * This is done with `mvn package` in individual directories
+ * Then run `mvn package` in project root (here)
+ * To deploy changes run `cdk deploy`in project root. You can specify the account by using your aws profiles aka `cdk deploy --profile vayla-ade-prod`
+
+## Project structure
+
+ * `src` has the cdk java classes and templates
+    * VelhoAnalyticsStack.java for main resources and PipleStack.java for ci/cd stuff
+ * `Cloudformation` has cloudformation templates for services that can't be done with cdk
+ * `lambdas` holds the java code / projects for lambdas that contain all the business value of this project
