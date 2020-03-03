@@ -28,12 +28,14 @@ exports.handler = async (event) => {
         function downloadXML(callback){
             //seuraava paiva
             const begindate = moment().add(1, 'days').startOf('day').format('YYYY-MM-DDTHH:mm:ss');
+            //fraktiilit 10pv kuten normaalit ennusteet tulevat fmi:lta
+            const enddate = moment(begindate).add(9, 'days').startOf('day').format('YYYY-MM-DDTHH:mm:ss');
             console.log('## start date');
             console.log(begindate);
+            console.log('## end date');
+            console.log(enddate);
 
-            //muutetaan mahdollisesti hakemaan silmukassa seuraavat 10pv kuten
-            //normaalit ennusteet tulevat fmi:lta
-            const dateparams = '&starttime=' + begindate;
+            const dateparams = '&starttime=' + begindate + '&endtime=' + enddate;
 
             const options = {
                 host: process.env.fmiHost,
@@ -92,12 +94,73 @@ exports.handler = async (event) => {
             });
         }
 
-        function createCSV(data, callback){
-            callback(null, 'TBD');
+        function createCSV(jsondata, callback){
+            // select location id
+            const locationid = process.env.fmisid; // jp.query(jsondata, '$..Location.identifier'); --jos siis tulisi FMI:n vastauksessa, mutta kun ei tule
+            console.log('## location identifier: ');
+            console.log(locationid);
+
+            // select begin and end date
+            let begindate = jp.query(jsondata, '$..TimePeriod.beginPosition');
+            console.log('## dates');
+            console.log(begindate);
+
+            // select the forecast(s)
+            let datablock = jp.query(jsondata, '$..result.MultiPointCoverage.rangeSet.DataBlock');
+            console.log('## datablock');
+            console.log(datablock);
+            const fractiles = JSON.stringify(datablock[0].doubleOrNilReasonTupleList).replace(/"/g, '').split(' \\n');
+            console.log('## fractiles: ' + fractiles.length);
+            console.log(fractiles);
+            
+            // start csv with a header
+            let csvObj = 'FMISID, TIME, F10, F50, F90\r\n';
+            console.log(csvObj);
+            
+            // iterate fractiles (sets) for csv rows
+            console.log('## creating csv rows');
+            let day = moment(begindate[0]);
+            const stationid = process.env.fmisid;
+            fractiles.forEach(fractileset => {
+                console.group('## fractile set:' + fractileset);
+                let fractilearray = fractileset.trim().split(' ');
+                //todo: check that we got sane fractlearray with 3 cells?
+                csvObj = csvObj + // header
+                        stationid + ',' + //fmisid
+                        day.format() + ',' + //time
+                        fractilearray[0].trim() + ',' + //f10
+                        fractilearray[1].trim() + ',' + //f50
+                        fractilearray[2].trim() + //f90
+                        '\r\n';
+                day.add(6, 'hours'); // add 6 hours since we didnt get timevalue pairs, only start and enddate for whole set where 1 timestep = 6h
+            });
+            console.log('## csv contents: ');
+            console.log(csvObj);
+
+
+            callback(null, csvObj);
         }
 
-        function saveCSV(data, callback){
-            callback(null, 'TBD');
+        function saveCSV(csvdata, callback){
+            // save as csv
+            const bucketParams = {
+                Bucket: process.env.workBucket,
+                Key: process.env.prefix + '/' + process.env.prefix + '.csv',
+                ContentType: 'text/csv',
+                ContentLength: csvdata.length,
+                Body: csvdata
+            }
+            
+            s3.putObject(bucketParams, function(err, data) {
+                if (err){  
+                    console.log(err);
+                    reject(err);
+                } else {
+                    console.log('## save csv success!');
+                    //resolve(data);
+                    callback(null, data);
+                }
+            }); 
         }
 
     });

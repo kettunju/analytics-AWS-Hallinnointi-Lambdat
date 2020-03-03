@@ -92,12 +92,13 @@ exports.handler = async (event) => {
             console.log(asemat);
             
             // start csv with a header
-            let csvObj = 'FMISID, NAME, POS\r\n';
+            let csvObj = 'FMISID, NAME, POS_LAT, POST_LON\r\n';
 
             // iterate stations for csv rows
             console.log('## creating csv rows');
             asemat.forEach(asema => {
-                csvObj = csvObj + asema.identifier + ',' + asema.name[0] + ',' + asema.representativePoint.Point.pos + '\r\n';
+                const posarray = asema.representativePoint.Point.pos.split(' ');
+                csvObj = csvObj + asema.identifier + ',' + asema.name[0] + ',' + posarray[0] + ',' + posarray[1] + '\r\n';
             });
             console.log('## csv contents: ');
             console.log(csvObj);
