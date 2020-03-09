@@ -92,7 +92,7 @@ exports.handler = async (event) => {
             console.log(asemat);
             
             // start csv with a header
-            let csvObj = 'FMISID, NAME, POS_LAT, POST_LON\r\n';
+            let csvObj = 'FMISID,NAME,POS_LAT,POS_LON\r\n';
 
             // iterate stations for csv rows
             console.log('## creating csv rows');

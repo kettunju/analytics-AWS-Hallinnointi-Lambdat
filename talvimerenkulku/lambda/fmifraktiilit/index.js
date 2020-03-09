@@ -114,7 +114,7 @@ exports.handler = async (event) => {
             console.log(fractiles);
             
             // start csv with a header
-            let csvObj = 'FMISID, TIME, F10, F50, F90\r\n';
+            let csvObj = 'FMISID,TIME,F10,F50,F90\r\n';
             console.log(csvObj);
             
             // iterate fractiles (sets) for csv rows

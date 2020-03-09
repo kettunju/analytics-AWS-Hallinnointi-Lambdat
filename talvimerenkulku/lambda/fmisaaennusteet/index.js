@@ -103,7 +103,7 @@ exports.handler = async (event) => {
             console.log(forecasts);
             
             // start csv with a header
-            let csvObj = 'FMISID, TIME, VALUE\r\n';
+            let csvObj = 'FMISID,TIME,VALUE\r\n';
 
             // iterate observations for csv rows
             console.log('## creating csv rows');
