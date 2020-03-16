@@ -6,16 +6,10 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonMappingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-
 import software.amazon.awscdk.core.Construct;
 import software.amazon.awscdk.core.Duration;
-import software.amazon.awscdk.core.SecretValue;
 import software.amazon.awscdk.core.Stack;
 import software.amazon.awscdk.core.StackProps;
-import software.amazon.awscdk.services.events.CronOptions;
 import software.amazon.awscdk.services.events.Rule;
 import software.amazon.awscdk.services.events.Schedule;
 import software.amazon.awscdk.services.events.targets.LambdaFunction;
@@ -28,15 +22,8 @@ import software.amazon.awscdk.services.s3.BucketEncryption;
 import software.amazon.awscdk.services.s3.BucketProps;
 import software.amazon.awscdk.services.s3.NotificationKeyFilter;
 import software.amazon.awscdk.services.s3.notifications.LambdaDestination;
-import software.amazon.awscdk.services.secretsmanager.Secret;
 import software.amazon.awscdk.services.sns.Topic;
 import software.amazon.awscdk.services.sqs.Queue;
-import software.amazon.awscdk.services.ssm.CfnMaintenanceWindowTarget.TargetsProperty;
-import software.amazon.awscdk.services.stepfunctions.Activity;
-import software.amazon.awscdk.services.stepfunctions.Chain;
-import software.amazon.awscdk.services.stepfunctions.StateMachine;
-import software.amazon.awscdk.services.stepfunctions.Task;
-import software.amazon.awscdk.services.stepfunctions.tasks.InvokeActivity;
 
 public class VelhoAnalyticsStack extends Stack {
 	public VelhoAnalyticsStack(final Construct parent, final String id) {
@@ -82,6 +69,12 @@ public class VelhoAnalyticsStack extends Stack {
 						.effect(Effect.ALLOW).actions(Arrays.asList("s3:*"))
 						// .resources(Arrays.asList(workBucket.getBucketArn()))
 						.resources(Arrays.asList("*")).build());
+		
+		getMetadataLambda
+		.addToRolePolicy(PolicyStatement.Builder.create()
+				.effect(Effect.ALLOW)
+				.actions(Arrays.asList("secretsmanager:*"))
+				.resources(Arrays.asList("arn:aws:secretsmanager:eu-central-1:426182641979:secret:VelhoSecrets-pWNDv4")).build());
 		
 		// Metadataloderin ymparistomuuttujat
 		environment = new HashMap<String, String>();
@@ -130,6 +123,13 @@ public class VelhoAnalyticsStack extends Stack {
 						.actions(Arrays.asList("s3:*"))
 						.resources(Arrays.asList("*")).build());
 		
+		// AWS SSM velho -> ade mappausten haku
+		velhoDataLoderLambda
+		.addToRolePolicy(PolicyStatement.Builder.create()
+				.effect(Effect.ALLOW)
+				.actions(Arrays.asList("secretsmanager:*"))
+				.resources(Arrays.asList("arn:aws:secretsmanager:eu-central-1:426182641979:secret:VelhoSecrets-pWNDv4")).build());
+		
 		
 		// Collector (raakadan haku) ymparistomuuttujat
 		environment = new HashMap<String, String>();
@@ -150,6 +150,13 @@ public class VelhoAnalyticsStack extends Stack {
 						.effect(Effect.ALLOW)
 						.actions(Arrays.asList("s3:*"))
 						.resources(Arrays.asList("*")).build());
+
+		// AWS SSM velho api key haku
+		velhoCollectorLambda
+		.addToRolePolicy(PolicyStatement.Builder.create()
+				.effect(Effect.ALLOW)
+				.actions(Arrays.asList("secretsmanager:*"))
+				.resources(Arrays.asList("arn:aws:secretsmanager:eu-central-1:426182641979:secret:VelhoSecrets-pWNDv4")).build());
 
 		// viestinvalitys
 		final Queue queue = Queue.Builder.create(this, "VelhoAnalyticsQueue").visibilityTimeout(Duration.seconds(300))

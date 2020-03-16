@@ -12,16 +12,17 @@ import com.amazonaws.services.lambda.runtime.LambdaLogger;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3ClientBuilder;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vayla.lambda.velho.metadata.auth.AWS4SignerBase;
 import com.vayla.lambda.velho.metadata.auth.AWS4SignerForAuthorizationHeader;
 import com.vayla.lambda.velho.metadata.utils.HttpUtils;
+import com.vayla.lambda.velho.metadata.utils.SecretManagerUtil;
 
 public class LambdaFunctionHandler implements RequestHandler<Object, String> {
 	private AmazonS3 s3 = AmazonS3ClientBuilder.standard().withRegion(Regions.EU_CENTRAL_1).build();
 	static final String velhoHost = System.getenv("velhoHost"); //"api.stg.velho.vayla.fi";
 	static final String velhoService = "execute-api"; // AWS API Gateway
-	static final String velhoAccessKey = System.getenv("velhoAccessKey");
-	static final String velhoSecretKey = System.getenv("velhoSecretKey");
 	static final String velhoWorkBucket = System.getenv("workBucket");
 	static final String velhoWorkBucketPrefix = System.getenv("metadataprefix");
 	static final String landingBucket = System.getenv("landingbucket");
@@ -44,6 +45,9 @@ public class LambdaFunctionHandler implements RequestHandler<Object, String> {
 	public String handleRequest(Object event, Context context) {
 		//this.logger = context.getLogger();
 		log("## Received event: " + event);
+		
+		ObjectMapper mapper = new ObjectMapper();
+		
 		//TODO: tuleeko metadatakutsut eventissa, vai listataanko valmiiksi ja kaydaan lapi?
 		List<URL> urlList = new ArrayList<URL>();
 
@@ -62,7 +66,18 @@ public class LambdaFunctionHandler implements RequestHandler<Object, String> {
 				AWS4SignerForAuthorizationHeader signer = new AWS4SignerForAuthorizationHeader(myUrl, "GET", velhoService, "eu-central-1");
 				Map<String, String> headers = new HashMap<String, String>();
 				Map<String, String> queryParams = new HashMap<String, String>();
-				String authHeader = signer.computeSignature(headers, queryParams, AWS4SignerBase.EMPTY_BODY_SHA256, velhoAccessKey, velhoSecretKey);
+				
+				String secrets = SecretManagerUtil.getSecret("VelhoSecrets", "eu-central-1");
+				log("## got secrets: \n" + (secrets == null ? null : secrets.length()) ); // ei tulosteta avaimia edes aws lokiin
+				
+				if(secrets==null) throw new IllegalArgumentException("Salausavaimia ei kaytettavissa");
+				JsonNode json = mapper.readTree(secrets);
+				JsonNode velhoAccessKey = json.findValue("velhoAccessKey");
+				JsonNode velhoSecretKey = json.findValue("velhoSecretKey");
+
+				if(velhoAccessKey == null || velhoSecretKey == null) throw new IllegalArgumentException("Salausavain ei voi olla null");
+				
+				String authHeader = signer.computeSignature(headers, queryParams, AWS4SignerBase.EMPTY_BODY_SHA256, velhoAccessKey.asText(), velhoSecretKey.asText());
 				log(authHeader);
 				headers.put("Authorization", authHeader);
 				
