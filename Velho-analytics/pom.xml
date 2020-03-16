@@ -83,7 +83,7 @@
             <artifactId>sqs</artifactId>
             <version>1.20.0</version>
         </dependency>
-                <dependency>
+        <dependency>
             <groupId>software.amazon.awscdk</groupId>
             <artifactId>codedeploy</artifactId>
             <version>1.19.0</version>

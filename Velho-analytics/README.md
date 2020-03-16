@@ -25,6 +25,6 @@ It is a [Maven](https://maven.apache.org/) based project, so you can open this p
 ## Project structure
 
  * `src` has the cdk java classes and templates
-    * VelhoAnalyticsStack.java for main resources and PipleStack.java for ci/cd stuff
+    * `VelhoAnalyticsStack.java` for main resources and `PipleStack.java` for ci/cd stuff
  * `Cloudformation` has cloudformation templates for services that can't be done with cdk
  * `lambdas` holds the java code / projects for lambdas that contain all the business value of this project

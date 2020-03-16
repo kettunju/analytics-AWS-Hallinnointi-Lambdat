@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.HashMap;
 
 import software.amazon.awscdk.core.App;
+import software.amazon.awscdk.core.Construct;
 import software.amazon.awscdk.core.SecretValue;
 import software.amazon.awscdk.core.Stack;
 import software.amazon.awscdk.core.StackProps;
@@ -35,25 +36,22 @@ import software.amazon.awscdk.services.secretsmanager.SecretAttributes;
  */
 public class PipelineStack extends Stack {
     // alternate constructor for calls without props. lambdaCode is required. 
-    public PipelineStack(final App scope, final String id, final CfnParametersCode lambdaCode) {
+    public PipelineStack(final Construct scope, final String id, final CfnParametersCode lambdaCode) {
         this(scope, id, null, lambdaCode);
     }
     
     @SuppressWarnings("serial")
-    public PipelineStack(final App scope, final String id, final StackProps props, final CfnParametersCode lambdaCode) {
+    public PipelineStack(final Construct scope, final String id, final StackProps props, final CfnParametersCode lambdaCode) {
         super(scope, id, props);
         
         Secret githubSecret = (Secret)Secret.fromSecretAttributes(this, "GitHubSecret", SecretAttributes.builder()
-                .secretArn("arn:aws:secretsmanager:<region>:<account-id-number>:secret:<secret-name>-<random-6-characters>")
+                .secretArn("arn:aws:secretsmanager:eu-central-1:426182641979:secret:velho/github-NRRYEN")
                 .build());
 
         PipelineProject cdkBuild = PipelineProject.Builder.create(this, "CDKBuild") 
                     .buildSpec(BuildSpec.fromObject(new HashMap<String, Object>() {{
                         put("version", "0.2");
                         put("phases", new HashMap<String, Object>() {{
-                            put("install", new HashMap<String, String>() {{
-                                put("commands", "npm install");
-                            }});
                             put("build", new HashMap<String, Object>() {{
                                 put("commands", Arrays.asList("npm run build", 
                                                               "npm run cdk synth -- o dist"));
