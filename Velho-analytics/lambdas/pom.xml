@@ -12,6 +12,9 @@
     	<module>velhometadata</module>
     	<module>velhometadataconverter</module>
 	</modules>
+	<properties>
+        <maven.test.skip>true</maven.test.skip>
+    </properties>
 	<build>
         <plugins>
             <plugin>

@@ -6,6 +6,9 @@
   <artifactId>velho.metadata.converter</artifactId>
   <version>1.0.0</version>
   <packaging>jar</packaging>
+  <properties>
+        <maven.test.skip>true</maven.test.skip>
+  </properties>
 
   <build>
     <plugins>
