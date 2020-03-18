@@ -69,11 +69,14 @@
       <dependency>
         <groupId>com.amazonaws</groupId>
         <artifactId>aws-java-sdk-bom</artifactId>
-        <version>1.11.256</version>
+        <version>1.11.739</version>
         <type>pom</type>
         <scope>import</scope>
       </dependency>
     </dependencies>
   </dependencyManagement>
+  <properties>
+    <maven.test.skip>true</maven.test.skip>
+  </properties>
 </project>
 
