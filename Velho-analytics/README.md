@@ -18,7 +18,7 @@ It is a [Maven](https://maven.apache.org/) based project, so you can open this p
 
 ## Build and deploy
  * First build and package all the lambdas that need to be (re)delpoyed
-    * This is done with `mvn package` in individual directories
+    * This is done with `mvn package` in /lambdas directory (it has a parent project for all lambdas)
  * Then run `mvn package` in project root (here)
  * To deploy changes run `cdk deploy`in project root. You can specify the account by using your aws profiles aka `cdk deploy --profile vayla-ade-prod`
 
