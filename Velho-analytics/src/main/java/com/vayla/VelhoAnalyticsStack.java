@@ -41,12 +41,12 @@ public class VelhoAnalyticsStack extends Stack {
 		Bucket landingBucket = new Bucket(this, "velholandingbucket", s3BucketProps);
 		Bucket workBucket = new Bucket(this, "velhoworkbucket", s3BucketProps);
 
-		final Function evenPasserLambda = Function.Builder.create(this, "EventPasser")
-				.functionName("VelhoLandingBucketEventPasser").timeout(Duration.minutes(5))
-				.code(Code.fromAsset("lambdas" + File.separator + "eventpasser" + File.separator + "target"
-						+ File.separator + "lambda-java-evenpasser-1.0-SNAPSHOT.jar"))
-				.runtime(software.amazon.awscdk.services.lambda.Runtime.JAVA_8)
-				.handler("com.vayla.Lambdas.eventpasser.EventPass").build();
+//		final Function evenPasserLambda = Function.Builder.create(this, "EventPasser")
+//				.functionName("VelhoLandingBucketEventPasser").timeout(Duration.minutes(5))
+//				.code(Code.fromAsset("lambdas" + File.separator + "eventpasser" + File.separator + "target"
+//						+ File.separator + "lambda-java-evenpasser-1.0-SNAPSHOT.jar"))
+//				.runtime(software.amazon.awscdk.services.lambda.Runtime.JAVA_8)
+//				.handler("com.vayla.Lambdas.eventpasser.EventPass").build();
 
 		// Metadataloderin ymparistomuuttujat
 		Map<String, String> environment = new HashMap<String, String>();
